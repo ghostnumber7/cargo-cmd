@@ -26,11 +26,12 @@ enum Cli {
 
 #[derive(Deserialize, Debug)]
 struct Cargotoml {
-    package: Package,
+    package: Option<WithMetadata>,
+    workspace: Option<WithMetadata>,
 }
 
 #[derive(Deserialize, Debug)]
-struct Package {
+struct WithMetadata {
     metadata: Metadata,
 }
 
@@ -102,11 +103,7 @@ fn get_commands(command: &str) -> Result<Vec<(String, String)>, String> {
         .read_to_string(&mut cargo_str)
         .or(Err("Could not read the contents of Cargo.toml"))?;
 
-    let cargo_toml: Cargotoml =
-        toml::from_str(&cargo_str[..]).or(Err("Could not find commands in Cargo.toml"))?;
-
-    let cargo_commands = cargo_toml.package.metadata.commands;
-
+    let cargo_commands = get_commands_from_str(&cargo_str)?;
     for name in names {
         let command_to_run = &cargo_commands.get(&name);
 
@@ -120,4 +117,55 @@ fn get_commands(command: &str) -> Result<Vec<(String, String)>, String> {
     }
 
     Ok(commands)
+}
+
+fn get_commands_from_str(cargo_str: &str) -> Result<HashMap<String, String>, String> {
+    let cargo_toml: Cargotoml =
+        toml::from_str(&cargo_str[..]).or(Err("Could not find commands in Cargo.toml"))?;
+
+    let mut cargo_commands: HashMap<String, String> = HashMap::new();
+
+    if let Some(package) = cargo_toml.package {
+        cargo_commands.extend(package.metadata.commands);
+    } else if let Some(workspace) = cargo_toml.workspace {
+        cargo_commands.extend(workspace.metadata.commands);
+    } else {
+        return Err("Could not find commands in Cargo.toml".to_string());
+    }
+
+    Ok(cargo_commands)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_commands_from_package_str() {
+        let cargo_str = r#"
+        [package]
+        name = "test"
+        version = "0.1.0"
+        [package.metadata.commands]
+        test = "echo 'test'"
+        "#;
+
+        let commands = get_commands_from_str(cargo_str).unwrap();
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands.get("test"), Some(&"echo 'test'".to_string()));
+    }
+
+    #[test]
+    fn test_get_commands_from_workspace_str() {
+        let cargo_str = r#"
+        [workspace]
+        members = ["test"]
+        [workspace.metadata.commands]
+        test = "echo 'test from workspace'"
+        "#;
+
+        let commands = get_commands_from_str(cargo_str).unwrap();
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands.get("test"), Some(&"echo 'test from workspace'".to_string()));
+    }
 }

@@ -22,6 +22,13 @@ You can define your commands in `Cargo.toml` under the `[package.metadata.comman
 greet = "echo 'Hello, planet!'"
 ```
 
+If working with a workspace, you can use the `[workspace.metadata.commands]` table instead:
+
+```toml
+[workspace.metadata.commands]
+greet = "echo 'Hello, planet!'"
+```
+
 Now you can run `cargo cmd greet`:
 
 ```sh
